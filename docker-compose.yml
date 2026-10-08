@@ -1,24 +1,6 @@
 services:
-  postgres:
-    image: postgres:17-alpine
-    container_name: vnfundme-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-vnfundme}
-      POSTGRES_USER: ${POSTGRES_USER:-vnfundme}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vnfundme_password}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   minio:
-    image: quay.io/minio/minio:latest
+    image: quay.io/minio/aistor/minio
     container_name: vnfundme-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -37,14 +19,12 @@ services:
     container_name: vnfundme-backend
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
       minio:
         condition: service_started
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vnfundme}:${POSTGRES_PASSWORD:-vnfundme_password}@postgres:5432/${POSTGRES_DB:-vnfundme}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to an external PostgreSQL connection string}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-access-secret}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh-secret}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
@@ -67,9 +47,11 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        VITE_API_URL: ${VITE_API_URL:-/api}
     container_name: vnfundme-frontend
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       backend:
         condition: service_started
@@ -77,5 +59,4 @@ services:
       - "${FRONTEND_PORT:-8080}:80"
 
 volumes:
-  postgres_data:
   minio_data:
